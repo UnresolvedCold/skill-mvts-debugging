@@ -56,9 +56,24 @@ kubectl exec mvts-0 -n qa3-cluster-devrelayonm-greymatter -c ml-engine-mvts -- s
 
 Skills live in `.claude/commands/` as individual `.md` files. **Always create a new `.md` file for each new skill/investigation, commit, and push to origin.**
 
-| Skill | File | Description |
+### Utilities
+
+| Skill | Arguments | Description |
 |---|---|---|
-| `/debug-rtr` | `debug-rtr.md` | Debug workflow starting from an RTR ID |
-| `/debug-order` | `debug-order.md` | Debug workflow starting from an Order ID |
-| `/issue-order-promotion` | `issue-order-promotion.md` | Issue 1: Order promotion mismatch (2026-02-24) |
-| `/issue-no-exit-queue` | `issue-no-exit-queue.md` | Issue 2: Empty rangerIDList at conveyor exit (2026-02-24) |
+| `/setup-context` | `<env-name>` | Switch kubectl context + namespace by env name |
+| `/find-logs` | `[namespace]` | List all log files in the pod, newest first |
+
+### Debug Workflows
+
+| Skill | Arguments | Description |
+|---|---|---|
+| `/debug-rtr` | `<rtr_id> [namespace]` | Full automated investigation from an RTR ID |
+| `/debug-order` | `<order_id> [namespace]` | Full automated investigation from an Order ID |
+| `/debug-on-demand-bot` | `<pps_id> <gmc_timestamp> [namespace]` | Investigate empty rangerIDList at a PPS conveyor exit |
+
+### Issue Records
+
+| Skill | Description |
+|---|---|
+| `/issue-order-promotion` | Issue 1: Order promotion mismatch — MSIO bin assigned without promotion (2026-02-24) |
+| `/issue-no-exit-queue` | Issue 2: Empty rangerIDList at PPS 5 conveyor exit — fleet exhaustion (2026-02-24) |

@@ -1,36 +1,46 @@
-Debug an MVTS issue starting from an Order ID.
+Investigate an MVTS issue starting from an Order ID.
 
-## Usage
-Provide an order ID and optionally the log file if already known.
+**Arguments:** `<order_id> [namespace]`
 
-## Steps
+Example: `/debug-order 961158 qa3-cluster-devrelayonm-greymatter`
 
-### 1. Find which log file contains the order ID
-Search `scheduler.log` first, then archived logs in descending order:
+---
+
+Parse `$ARGUMENTS` to extract:
+- `order_id` — first token
+- `namespace` — second token if provided; otherwise ask the user before proceeding
+
+Then run all steps below in sequence using `kubectl exec`. Carry extracted values forward into each subsequent step automatically. At the end, print a structured summary of all findings.
+
+## Step 1 — Find the log file
+
+Search `scheduler.log` first, then archived logs descending. Stop at the first file that matches.
+
 ```bash
-kubectl exec mvts-0 -n $NAMESPACE -c ml-engine-mvts -- sh -c \
-  'grep -l "<order_id>" /app/data/logs/scheduler.log 2>/dev/null'
-# then descending archives:
-kubectl exec mvts-0 -n $NAMESPACE -c ml-engine-mvts -- sh -c \
-  'zgrep -l "<order_id>" /app/data/logs/scheduler.YYYY-MM-DD.N.log.gz'
-```
-Stop at the first file that matches.
-
-### 2. Find the task associated with the order ID
-Message lines are 3–4 MB — use a Python script copied into the pod:
-```bash
-kubectl cp parse_order.py mvts-0:/tmp/parse_order.py -n $NAMESPACE -c ml-engine-mvts
-kubectl exec mvts-0 -n $NAMESPACE -c ml-engine-mvts -- python3 /tmp/parse_order.py
+kubectl exec mvts-0 -n <namespace> -c ml-engine-mvts -- sh -c \
+  'grep -l "<order_id>" /app/data/logs/scheduler.log 2>/dev/null; zgrep -l "<order_id>" /app/data/logs/*.gz 2>/dev/null | sort -r | head -1'
 ```
 
-**`parse_order.py` template:**
+Extract: `log_file`
+
+## Step 2 — Find the task for this order
+
+Message lines are 3–4 MB — use a Python script. Write the script locally, copy it into the pod, run it:
+
+```bash
+kubectl cp /tmp/parse_order.py mvts-0:/tmp/parse_order.py -n <namespace> -c ml-engine-mvts
+kubectl exec mvts-0 -n <namespace> -c ml-engine-mvts -- python3 /tmp/parse_order.py
+```
+
+**Script to write to `/tmp/parse_order.py`:**
 ```python
-import re, json, gzip
+import re, json, gzip, sys
 
-logfile = "/app/data/logs/<file>.log.gz"
+logfile = "/app/data/logs/<log_file>"
 order_id = "<order_id>"
+opener = gzip.open if logfile.endswith(".gz") else open
 
-with gzip.open(logfile, "rt") as f:
+with opener(logfile, "rt") as f:
     for line in f:
         if order_id not in line:
             continue
@@ -43,26 +53,54 @@ with gzip.open(logfile, "rt") as f:
                 if str(order.get("order_id")) == order_id:
                     print("task_key:", task.get("task_key"))
                     print("task_type:", task.get("task_type"))
+                    print("task_subtype:", task.get("task_subtype"))
                     print("transport_entity_id:", task.get("transport_entity_id"))
-                    print("order:", order)
+                    print("order:", json.dumps(order, indent=2))
+                    sys.exit(0)
 ```
-Extract: `task_key`, `task_type`, `transport_entity_id`
 
-### 3. Find when the task was first assigned to an HTM bot
+Extract: `task_key`, `task_type`, `task_subtype`, `transport_entity_id`, order details
+
+## Step 3 — Find first bot assignment
+
 ```bash
-kubectl exec mvts-0 -n $NAMESPACE -c ml-engine-mvts -- sh -c \
-  'zgrep "Output:.*<task_key>" /app/data/logs/<file>.log.gz | head -1'
+kubectl exec mvts-0 -n <namespace> -c ml-engine-mvts -- sh -c \
+  'zgrep "Output:.*<task_key>" /app/data/logs/<log_file> 2>/dev/null || grep "Output:.*<task_key>" /app/data/logs/<log_file> 2>/dev/null | head -1'
 ```
-Extracts: `request_id`, `timestamp` of first assignment, assigned `ranger_id`
 
-### 4. Get the input Message for that request_id
+Extract: `request_id`, `timestamp`, `ranger_id`
+
+## Step 4 — Get the input Message for that request
+
 ```bash
-kubectl exec mvts-0 -n $NAMESPACE -c ml-engine-mvts -- sh -c \
-  'zgrep "Message:.*<request_id>" /app/data/logs/<file>.log.gz | head -1'
+kubectl exec mvts-0 -n <namespace> -c ml-engine-mvts -- sh -c \
+  'zgrep "Message:.*<request_id>" /app/data/logs/<log_file> 2>/dev/null || grep "Message:.*<request_id>" /app/data/logs/<log_file> 2>/dev/null | head -1'
 ```
-Parse JSON to extract `serviced_bins` and `serviced_orders` for the specific `task_key`.
 
-### 5. Check if a bin is virtual for a PPS
+Use a Python script if the line is too large to parse inline. Extract `serviced_bins` and `serviced_orders` for the specific `task_key`.
+
+## Step 5 — Check bin virtual/MSIO status
+
 From the Message JSON, look up `pps_list[id=<pps_id>].bin_details[bin_id=<bin_id>]`:
-- `is_virtual_bin_used: true/false` — whether the bin slot is virtual
-- `is_msio: true/false` — whether it's a Multi-Slot Input/Output bin
+- `is_virtual_bin_used` — whether the bin slot is virtual
+- `is_msio` — whether it's a Multi-Slot Input/Output bin
+- `promoted_to_physical_bin` on each order in `serviced_orders`
+
+Apply the HTM Assignment Rule:
+> Assignment is valid only if at least one order has `promoted_to_physical_bin: true`, OR at least one order's bin is not MSIO and not virtual. If all orders are MSIO/virtual and none promoted → assignment should have been withheld.
+
+## Final Summary
+
+Print a structured report:
+```
+Order ID:           <order_id>
+Log file:           <log_file>
+Task key:           <task_key>
+Task type:          <task_type> → <task_subtype>
+Transport entity:   <transport_entity_id>
+First assign:       <timestamp>  request=<request_id>
+Ranger:             Bot <ranger_id>
+Serviced bin:       <bin_id>  is_msio=<>  is_virtual_bin_used=<>
+promoted_to_physical_bin: <>
+Verdict:            VALID assignment / INVALID — assignment should have been withheld
+```

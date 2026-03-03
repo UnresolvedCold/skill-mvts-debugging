@@ -26,3 +26,12 @@ Reference details for Issue 1: Order Promotion Debugging
 Bin `7-1` is a **physical MSIO bin**. The task references it as the service bin but `promoted_to_physical_bin: false` for the order — mismatch between task bin expectation and PPS 7's bin configuration.
 
 Per the HTM Assignment Rule: if all orders are on MSIO/virtual bins and none are promoted, the planner must withhold assignment. In this case the order was not promoted yet the task was assigned.
+
+## Status
+- [ ] Open
+- [x] Root cause identified
+
+## Remediation
+- Planner must check `promoted_to_physical_bin` on all orders in `serviced_orders` before assigning a tote to an HTM bot.
+- If all orders are on MSIO bins and none have `promoted_to_physical_bin: true`, skip HTM assignment for that task until promotion occurs.
+- Related rule: see "HTM Assignment Rule for MSIO / Virtual Bins" in `CLAUDE.md`.

@@ -48,3 +48,12 @@ zgrep "OnDemandBotRequiredAtPPSInputMessage" /app/data/logs/<file>.log.gz
 
 ## Root Cause
 Only **1 bot (102)** was available fleet-wide for `HTM_HAI_K50_L_E1` version. The first on-demand call at `19:42:36` dispatched it to PPS 5. When GMC called again 25s later, bot 102 was already occupied and no other bots were free → empty list → totes stuck at conveyor exit.
+
+## Status
+- [ ] Open
+- [x] Root cause identified
+
+## Remediation
+- Short-term: ensure minimum bot fleet size per `HTM_HAI_K50_L_E1` version so at least 2 bots are available for on-demand dispatch.
+- Long-term: MVTS should include a warning in the API response when `rangerIDList` is empty due to fleet exhaustion (vs. other reasons), so GMC can surface it as a fleet capacity alert rather than a silent failure.
+- For investigation, use `/debug-on-demand-bot <pps_id> <timestamp> <namespace>` to reproduce the timeline.
