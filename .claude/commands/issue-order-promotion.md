@@ -9,6 +9,7 @@ Reference details for Issue 1: Order Promotion Debugging
 - "ENABLE_RELAY" : **MUST be true**
 - "ENABLE_KAFKA" : **MUST be true**
 - "ENABLE_EASYLOOP" : **MUST be true**
+
 **The following configurations can be tweaked as per use case but the order promotion feature will still work with the default values of these configurations:**
 - "ESTIMATE_VTM_BOT_TO_STORE_TIME_SECONDS" 
 - "ESTIMATE_TIME_TO_PICK_TOTE_FROM_STORE_SECONDS"
