@@ -39,9 +39,7 @@ Reference details for Issue 1: Order Promotion Debugging
 - `is_msio: true` (Multi-Slot Input/Output)
 
 ## Finding
- -Bin `7-1` is a **physical MSIO bin**. The task references it as the service bin but `promoted_to_physical_bin: false` for the order — mismatch between task bin expectation and PPS 7's bin configuration.
-Per the HTM Assignment Rule: if all orders are on MSIO/virtual bins and none are promoted, the planner must withhold assignment. In this case the order was not promoted yet the task was assigned.
-
+- Bin `7-1` is a **physical MSIO bin**. The task references it as the service bin but `promoted_to_physical_bin: false` for the order — mismatch between task bin expectation and PPS 7's bin configuration. Per the HTM Assignment Rule: if all orders are on MSIO/virtual bins and none are promoted, the planner must withhold assignment. In this case the order was not promoted yet the task was assigned.
 - When Kafka was disabled, order was promoted and cached, hence after enabling kafka no new promotions were being made.
 
 ## Status
